@@ -1534,26 +1534,10 @@
 
     // ========== 计时器模块 ==========
     var Timer = {
-        start: function() {
-            this.stop();
-            if (Game.timerMode === 'off') return;
-
-            // 限时赛模式：初始化总时间
-            if (Game.timerMode === 'total') {
-                Game.totalTimerBlack = 300; // 5分钟
-                Game.totalTimerWhite = 300;
-                Game.timerValue = 300;
-            } else {
-                // 每步计时模式
-                Game.timerValue = parseInt(Game.timerMode, 10);
-            }
-
-            UI.updateTimerDisplay();
-
+        _createInterval: function() {
             var self = this;
             Game.timerInterval = setInterval(function() {
                 if (Game.timerMode === 'total') {
-                    // 限时赛：减少当前玩家的总时间
                     if (Game.currentPlayer === 'black') {
                         Game.totalTimerBlack--;
                         Game.timerValue = Game.totalTimerBlack;
@@ -1561,24 +1545,34 @@
                         Game.totalTimerWhite--;
                         Game.timerValue = Game.totalTimerWhite;
                     }
-
-                    if (Game.timerValue <= 0) {
-                        self.stop();
-                        self._onTimeout();
-                        return;
-                    }
                 } else {
-                    // 每步计时
                     Game.timerValue--;
-                    if (Game.timerValue <= 0) {
-                        self.stop();
-                        self._onTimeout();
-                        return;
-                    }
+                }
+
+                if (Game.timerValue <= 0) {
+                    self.stop();
+                    self._onTimeout();
+                    return;
                 }
 
                 UI.updateTimerDisplay();
             }, 1000);
+        },
+
+        start: function() {
+            this.stop();
+            if (Game.timerMode === 'off') return;
+
+            if (Game.timerMode === 'total') {
+                Game.totalTimerBlack = 300;
+                Game.totalTimerWhite = 300;
+                Game.timerValue = 300;
+            } else {
+                Game.timerValue = parseInt(Game.timerMode, 10);
+            }
+
+            UI.updateTimerDisplay();
+            this._createInterval();
         },
 
         stop: function() {
@@ -1590,23 +1584,16 @@
 
         reset: function() {
             if (Game.timerMode === 'off') return;
+            if (Game.timerMode === 'total') return;
 
-            // 限时赛模式不重置，继续计时
-            if (Game.timerMode === 'total') {
-                return;
-            }
-
-            // 每步计时模式：重置计时器
             this.stop();
             this.start();
         },
 
-        // 恢复计时器（不重置时间），用于悔棋后继续计时
         resume: function() {
             if (Game.timerMode === 'off') return;
             this.stop();
 
-            // 限时赛模式：同步当前玩家的剩余时间到显示值
             if (Game.timerMode === 'total') {
                 Game.timerValue = Game.currentPlayer === 'black'
                     ? Game.totalTimerBlack
@@ -1614,34 +1601,7 @@
             }
 
             UI.updateTimerDisplay();
-
-            var self = this;
-            Game.timerInterval = setInterval(function() {
-                if (Game.timerMode === 'total') {
-                    if (Game.currentPlayer === 'black') {
-                        Game.totalTimerBlack--;
-                        Game.timerValue = Game.totalTimerBlack;
-                    } else {
-                        Game.totalTimerWhite--;
-                        Game.timerValue = Game.totalTimerWhite;
-                    }
-
-                    if (Game.timerValue <= 0) {
-                        self.stop();
-                        self._onTimeout();
-                        return;
-                    }
-                } else {
-                    Game.timerValue--;
-                    if (Game.timerValue <= 0) {
-                        self.stop();
-                        self._onTimeout();
-                        return;
-                    }
-                }
-
-                UI.updateTimerDisplay();
-            }, 1000);
+            this._createInterval();
         },
 
         _onTimeout: function() {
@@ -1664,37 +1624,59 @@
     var Replay = {
         _savedSettings: null,
 
+        _saveSettings: function() {
+            if (this._savedSettings) return;
+            this._savedSettings = {
+                gameMode: Game.gameMode,
+                aiDifficulty: Game.aiDifficulty,
+                playerColor: Game.playerColor,
+                timerMode: Game.timerMode,
+                gameType: Game.gameType,
+                freeModeEnabled: Game.freeModeEnabled,
+                forbiddenEnabled: Game.forbiddenEnabled
+            };
+        },
+
+        _restoreSettings: function() {
+            if (!this._savedSettings) return;
+            Game.gameMode = this._savedSettings.gameMode;
+            Game.aiDifficulty = this._savedSettings.aiDifficulty;
+            Game.playerColor = this._savedSettings.playerColor;
+            Game.timerMode = this._savedSettings.timerMode;
+            Game.gameType = this._savedSettings.gameType;
+            Game.freeModeEnabled = this._savedSettings.freeModeEnabled;
+            Game.forbiddenEnabled = this._savedSettings.forbiddenEnabled;
+            this._savedSettings = null;
+        },
+
+        _enterReplayMode: function() {
+            Game.replayMode = true;
+            Game.replayIndex = 0;
+            Game.autoPlay = false;
+            this._stopAutoPlay();
+        },
+
+        _showReplayUI: function() {
+            UI.showReplayControls(true);
+            UI.updateReplaySlider();
+            UI.setPlayButton(false);
+            UI.updateBoard();
+            UI.updateControls();
+        },
+
         start: function() {
             if (Game.moveHistory.length < 2) return;
 
-            if (!this._savedSettings) {
-                this._savedSettings = {
-                    gameMode: Game.gameMode,
-                    aiDifficulty: Game.aiDifficulty,
-                    playerColor: Game.playerColor,
-                    timerMode: Game.timerMode,
-                    gameType: Game.gameType,
-                    freeModeEnabled: Game.freeModeEnabled,
-                    forbiddenEnabled: Game.forbiddenEnabled
-                };
-            }
+            this._saveSettings();
 
             if (Game.gameOver && !Game.historySaved) {
                 History.save(History.determineResult());
                 Game.historySaved = true;
             }
 
-            Game.replayMode = true;
-            Game.replayIndex = 0;
-            Game.autoPlay = false;
-            this._stopAutoPlay();
-
-            UI.showReplayControls(true);
-            UI.updateReplaySlider();
-            UI.setPlayButton(false);
+            this._enterReplayMode();
+            this._showReplayUI();
             UI.updateStatus();
-            UI.updateBoard();
-            UI.updateControls();
         },
 
         exit: function() {
@@ -1706,19 +1688,6 @@
             UI.showReplayControls(false);
             UI.showHistory(false);
             Controller.resetGame();
-        },
-
-        _restoreSettings: function() {
-            if (this._savedSettings) {
-                Game.gameMode = this._savedSettings.gameMode;
-                Game.aiDifficulty = this._savedSettings.aiDifficulty;
-                Game.playerColor = this._savedSettings.playerColor;
-                Game.timerMode = this._savedSettings.timerMode;
-                Game.gameType = this._savedSettings.gameType;
-                Game.freeModeEnabled = this._savedSettings.freeModeEnabled;
-                Game.forbiddenEnabled = this._savedSettings.forbiddenEnabled;
-                this._savedSettings = null;
-            }
         },
 
         prev: function() {
@@ -1784,30 +1753,15 @@
             var game = games[index];
             if (!game) return;
 
-            if (!this._savedSettings) {
-                this._savedSettings = {
-                    gameMode: Game.gameMode,
-                    aiDifficulty: Game.aiDifficulty,
-                    playerColor: Game.playerColor,
-                    timerMode: Game.timerMode,
-                    gameType: Game.gameType,
-                    freeModeEnabled: Game.freeModeEnabled,
-                    forbiddenEnabled: Game.forbiddenEnabled
-                };
-            }
+            this._saveSettings();
 
             Game.moveHistory = game.moves.slice();
-            Game.replayMode = true;
-            Game.replayIndex = 0;
-            Game.autoPlay = false;
-            this._stopAutoPlay();
+            this._enterReplayMode();
             Game.gameMode = game.mode;
             Game.aiDifficulty = game.difficulty;
             if (game.gameType) Game.gameType = game.gameType;
 
-            UI.showReplayControls(true);
-            UI.updateReplaySlider();
-            UI.setPlayButton(false);
+            this._showReplayUI();
 
             var resultClass = Utils.resultClass(game.result);
             var resultLabel = Utils.resultLabel(game.result);
@@ -1820,7 +1774,6 @@
                     ' - ' + game.moveCount + '手';
             }
             UI.showHistory(false);
-            UI.updateBoard();
         }
     };
 
@@ -2152,33 +2105,37 @@
             }
         },
 
+        _resolveResult: function(result) {
+            var gameResult = 'draw';
+            var winner = null;
+            var loser = null;
+
+            if (result === 'win') {
+                winner = Game.moveHistory[Game.moveHistory.length - 1].player;
+            } else if (result === 'timeout') {
+                loser = Game.timeoutLoser;
+                winner = Utils.opponent(loser);
+            } else {
+                return gameResult;
+            }
+
+            if (Game.gameMode === 'ai') {
+                gameResult = winner === Game.humanPlayer ? 'win' : 'loss';
+                Sound.play(gameResult === 'win' ? 'win' : 'lose');
+                Stats.onGameEnd(gameResult);
+                UI.updateStats();
+            } else {
+                gameResult = winner === 'black' ? 'black_win' : 'white_win';
+                Sound.play('win');
+            }
+
+            return gameResult;
+        },
+
         _handleGameEnd: function(result) {
             Timer.stop();
 
-            var gameResult = 'draw';
-            if (result === 'win') {
-                var winner = Game.moveHistory[Game.moveHistory.length - 1].player;
-                if (Game.gameMode === 'ai') {
-                    gameResult = winner === Game.humanPlayer ? 'win' : 'loss';
-                    Sound.play(gameResult === 'win' ? 'win' : 'lose');
-                    Stats.onGameEnd(gameResult);
-                    UI.updateStats();
-                } else {
-                    gameResult = winner === 'black' ? 'black_win' : 'white_win';
-                    Sound.play('win');
-                }
-            } else if (result === 'timeout') {
-                var loser = Game.timeoutLoser;
-                if (Game.gameMode === 'ai') {
-                    gameResult = loser === Game.humanPlayer ? 'loss' : 'win';
-                    Sound.play(gameResult === 'win' ? 'win' : 'lose');
-                    Stats.onGameEnd(gameResult);
-                    UI.updateStats();
-                } else {
-                    gameResult = loser === 'black' ? 'white_win' : 'black_win';
-                    Sound.play('win');
-                }
-            }
+            var gameResult = this._resolveResult(result);
 
             if (!Game.historySaved) {
                 History.save(gameResult);
@@ -2193,25 +2150,15 @@
         undo: function() {
             if (Game.moveHistory.length === 0) return;
             if (Game.replayMode) return;
-
-            // 自由模式：允许游戏结束后悔棋
             if (!Game.freeModeEnabled && Game.gameOver) return;
 
-            // AI模式下，非自由模式需要悔两步，检查是否有足够的步数
-            if (Game.gameMode === 'ai' && !Game.freeModeEnabled && Game.moveHistory.length < 2) return;
-
-            Timer.stop();
-
             if (Game.gameMode === 'ai') {
-                // 自由模式：允许无限悔棋，包括AI的棋
-                if (Game.freeModeEnabled) {
-                    Game.undoMove();
-                    // 确保悔棋后轮到人类玩家
-                    if (Game.currentPlayer !== Game.humanPlayer) {
-                        Game.undoMove();
-                    }
-                } else {
-                    Game.undoMove();
+                // AI模式下，非自由模式需要至少2步
+                if (!Game.freeModeEnabled && Game.moveHistory.length < 2) return;
+
+                Game.undoMove();
+                // 非自由模式或悔棋后仍不是人类回合，再悔一步
+                if (!Game.freeModeEnabled || Game.currentPlayer !== Game.humanPlayer) {
                     Game.undoMove();
                 }
             } else {
@@ -2221,11 +2168,12 @@
             Game.gameOver = false;
             Game.hintCell = null;
 
+            Timer.stop();
+
             UI.updateStatus();
             UI.updateBoard();
             UI.updateControls();
 
-            // 恢复计时器（不重置时间）
             Timer.resume();
         },
 
