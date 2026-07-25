@@ -779,6 +779,7 @@
         board: null,
         aiPlayer: 'white',
         humanPlayer: 'black',
+        difficulty: 'medium',
 
         setBoard: function(board) {
             this.board = board;
@@ -787,6 +788,10 @@
         setPlayers: function(ai, human) {
             this.aiPlayer = ai;
             this.humanPlayer = human;
+        },
+
+        setDifficulty: function(d) {
+            this.difficulty = d || 'medium';
         },
 
         findBestMove: function(depth, maxCandidates, moveCount) {
@@ -899,7 +904,7 @@
                 var dr = DIRECTIONS[d][0];
                 var dc = DIRECTIONS[d][1];
                 var line = this._getLine(row, col, dr, dc, player);
-                total += this._evaluateLine(line);
+                total += this._evaluateLine(line, player);
             }
             return total;
         },
@@ -917,25 +922,45 @@
                 endC += dc;
             }
 
+            // Extend one context cell on each side for pattern matching
+            var beforeR = startR - dr, beforeC = startC - dc;
+            var afterR = endR + dr, afterC = endC + dc;
+
             var line = [];
+
+            if (Utils.inBounds(beforeR, beforeC)) {
+                line.push({ value: this.board[beforeR][beforeC] });
+            }
+
             var r = startR, c = startC;
             while (true) {
                 line.push({
-                    row: r,
-                    col: c,
                     value: (r === row && c === col) ? player : this.board[r][c]
                 });
                 if (r === endR && c === endC) break;
                 r += dr;
                 c += dc;
             }
+
+            if (Utils.inBounds(afterR, afterC)) {
+                line.push({ value: this.board[afterR][afterC] });
+            }
+
             return line;
         },
 
-        _evaluateLine: function(line) {
+        _evaluateLine: function(line, player) {
+            // Normalize values: player's stones → 'player', empty → '', opponent → 'opponent'
             var lineStr = '';
             for (var i = 0; i < line.length; i++) {
-                lineStr += (line[i].value || 'null') + ',';
+                var v = line[i].value;
+                if (v === player) {
+                    lineStr += 'player,';
+                } else if (v === null) {
+                    lineStr += ',';
+                } else {
+                    lineStr += 'opponent,';
+                }
             }
 
             for (var p = 0; p < PATTERNS.length; p++) {
@@ -946,7 +971,7 @@
 
             var count = 0;
             for (var j = 0; j < line.length; j++) {
-                if (line[j].value) count++;
+                if (line[j].value === player) count++;
             }
             return count * 3;
         }
@@ -2006,6 +2031,7 @@
             Game.init();
             this._initAIBoard();
             AI.setPlayers(Utils.opponent(Game.humanPlayer), Game.humanPlayer);
+            AI.setDifficulty(Game.aiDifficulty);
 
             UI.showSettings(false);
             UI.showReplayControls(false);
@@ -2055,6 +2081,7 @@
             Game.init();
             this._initAIBoard();
             AI.setPlayers(Utils.opponent(Game.humanPlayer), Game.humanPlayer);
+            AI.setDifficulty(Game.aiDifficulty);
 
             UI.showReplayControls(false);
             UI.showHistory(false);
