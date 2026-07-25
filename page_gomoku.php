@@ -1002,6 +1002,8 @@
             this.cursorPos = { row: CENTER, col: CENTER };
             this.historySaved = false;
             this.timeoutLoser = null;
+            this.totalTimerBlack = 300;
+            this.totalTimerWhite = 300;
         },
 
         makeMove: function(row, col) {
@@ -1451,6 +1453,16 @@
 
         determineResult: function() {
             if (!Game.gameOver) return null;
+
+            // 处理超时情况
+            if (Game.timeoutLoser) {
+                var winner = Utils.opponent(Game.timeoutLoser);
+                if (Game.gameMode === 'pvp') {
+                    return winner === 'black' ? 'black_win' : 'white_win';
+                } else {
+                    return winner === Game.humanPlayer ? 'win' : 'loss';
+                }
+            }
 
             if (Game.winCells.length === 0) return 'draw';
 
@@ -2103,12 +2115,18 @@
             // 自由模式：允许游戏结束后悔棋
             if (!Game.freeModeEnabled && Game.gameOver) return;
 
+            // 限时赛模式下，悔棋时不重置计时器，只停止
+            var wasTotalMode = Game.timerMode === 'total';
             Timer.stop();
 
             if (Game.gameMode === 'ai') {
                 // 自由模式：允许无限悔棋，包括AI的棋
                 if (Game.freeModeEnabled) {
                     Game.undoMove();
+                    // 确保悔棋后轮到人类玩家
+                    if (Game.currentPlayer !== Game.humanPlayer) {
+                        Game.undoMove();
+                    }
                 } else {
                     if (Game.moveHistory.length < 2) return;
                     Game.undoMove();
@@ -2125,7 +2143,41 @@
             UI.updateBoard();
             UI.updateControls();
 
-            if (Game.timerMode !== 'off') Timer.start();
+            // 限时赛模式下，悔棋后重新启动计时器（不重置时间）
+            if (Game.timerMode !== 'off') {
+                if (wasTotalMode) {
+                    // 限时赛：直接启动计时器，不重置时间
+                    var self = this;
+                    Game.timerInterval = setInterval(function() {
+                        if (Game.timerMode === 'total') {
+                            if (Game.currentPlayer === 'black') {
+                                Game.totalTimerBlack--;
+                                Game.timerValue = Game.totalTimerBlack;
+                            } else {
+                                Game.totalTimerWhite--;
+                                Game.timerValue = Game.totalTimerWhite;
+                            }
+
+                            if (Game.timerValue <= 0) {
+                                Timer.stop();
+                                Timer._onTimeout();
+                                return;
+                            }
+                        } else {
+                            Game.timerValue--;
+                            if (Game.timerValue <= 0) {
+                                Timer.stop();
+                                Timer._onTimeout();
+                                return;
+                            }
+                        }
+
+                        UI.updateTimerDisplay();
+                    }, 1000);
+                } else {
+                    Timer.start();
+                }
+            }
         },
 
         showHint: function() {
